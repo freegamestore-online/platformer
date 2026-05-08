@@ -60,6 +60,7 @@ export default function App() {
             { label: "Best", value: bestScore },
           ]}
           actions={<GameAuth />}
+          rules={<div><h3 style={{fontWeight:700}}>Platformer</h3><h4 style={{fontWeight:600}}>Controls</h4><ul><li>Arrow keys to move</li><li>Tap left side to move, right side to jump</li></ul><h4 style={{fontWeight:600}}>Rules</h4><ul><li>Endless platformer</li><li>Jump between platforms, collect coins</li><li>Don't fall off the bottom</li></ul></div>}
         />
       }
     >
