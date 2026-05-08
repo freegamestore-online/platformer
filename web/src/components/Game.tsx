@@ -4,6 +4,7 @@ import kaplay from "kaplay";
 interface GameProps {
   onScore: (score: number) => void;
   onGameOver: () => void;
+  paused?: boolean;
 }
 
 interface PosObj {
@@ -29,12 +30,14 @@ const GAP_RAMP = 0.15;
 const COIN_VALUE = 10;
 const DISTANCE_SCORE_RATE = 2;
 
-export function Game({ onScore, onGameOver }: GameProps) {
+export function Game({ onScore, onGameOver, paused }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onScoreRef = useRef(onScore);
   const onGameOverRef = useRef(onGameOver);
+  const pausedRef = useRef(paused);
   onScoreRef.current = onScore;
   onGameOverRef.current = onGameOver;
+  pausedRef.current = paused;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -186,7 +189,7 @@ export function Game({ onScore, onGameOver }: GameProps) {
 
     // Main update loop
     k.onUpdate(() => {
-      if (!alive) return;
+      if (!alive || pausedRef.current) return;
 
       const dt = k.dt();
       elapsed += dt;
