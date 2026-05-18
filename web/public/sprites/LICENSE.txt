@@ -1,0 +1,12 @@
+All sprite assets in this directory are by Kenney (kenney.nl).
+Licensed under Creative Commons Zero (CC0):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Sources:
+- characters.png, platform.png, coin.png
+    Kenney "Pixel Platformer" pack
+    https://kenney.nl/assets/pixel-platformer
+- bg-mountains.png, bg-hills-far.png, bg-hills-near.png,
+  bg-cloud1.png, bg-cloud2.png, bg-sun.png
+    Kenney "Background Elements" pack
+    https://kenney.nl/assets/background-elements
