@@ -15,6 +15,8 @@ interface PosObj {
 
 interface CoinObj extends PosObj {
   angle: number;
+  baseY: number;
+  bobOffset: number;
 }
 
 const GAME_WIDTH = 800;
@@ -91,6 +93,7 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       canvas,
       width: GAME_WIDTH,
       height: GAME_HEIGHT,
+      letterbox: true,
       background: [135, 200, 240] as [number, number, number],
       global: false,
     });
@@ -359,16 +362,19 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       platforms.push(plat);
 
       if (Math.random() < 0.6) {
+        const coinBaseY = y - 28;
         const coin = k.add([
           k.sprite("coin"),
           k.scale(COIN_SCALE),
-          k.pos(nextPlatformX + w / 2, y - 26),
+          k.pos(nextPlatformX + w / 2, coinBaseY),
           k.area(),
           k.anchor("center"),
           k.rotate(0),
           "coin",
-        ]);
-        coinObjects.push(coin as unknown as CoinObj);
+        ]) as unknown as CoinObj;
+        coin.baseY = coinBaseY;
+        coin.bobOffset = Math.random() * Math.PI * 2;
+        coinObjects.push(coin);
       }
     }
 
@@ -465,7 +471,11 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       for (const coin of coinObjects) {
         if (coin.exists()) {
           coin.pos.x -= speed;
-          coin.angle += 180 * dt;
+          // Hover: bob 4px vertically + sway ±6° rotation, phase-offset so a row
+          // of gems doesn't move in lockstep.
+          const phase = elapsed * 2 + coin.bobOffset;
+          coin.pos.y = coin.baseY + Math.sin(phase) * 4;
+          coin.angle = Math.sin(phase) * 6;
         }
       }
       player.pos.x -= speed;
