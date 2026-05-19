@@ -1,5 +1,6 @@
 import { useRef, useEffect } from "react";
 import kaplay from "kaplay";
+import { useGameSounds } from "@freegamestore/games";
 
 interface GameProps {
   onScore: (score: number) => void;
@@ -74,6 +75,11 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
   onGameOverRef.current = onGameOver;
   pausedRef.current = paused;
 
+  // SDK-synthesized sounds; auto-mute via the topbar toggle.
+  const sounds = useGameSounds();
+  const soundsRef = useRef(sounds);
+  soundsRef.current = sounds;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -127,6 +133,7 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
     let distance = 0;
     let elapsed = 0;
     let alive = true;
+    let wasGrounded = true;
 
     // Parallax scroll offsets (negative = world moves left)
     let scrollFar = 0;
@@ -385,6 +392,7 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       score = coins * COIN_VALUE + Math.floor(distance * DISTANCE_SCORE_RATE);
       onScoreRef.current(score);
       spawnSparkles(coinObj.pos.x, coinObj.pos.y);
+      soundsRef.current.playScore();
       coinObj.destroy();
       const idx = coinObjects.findIndex((c) => !c.exists());
       if (idx !== -1) coinObjects.splice(idx, 1);
@@ -459,10 +467,18 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       // Movement
       if (input.left) player.pos.x -= PLAYER_SPEED * dt;
       if (input.right) player.pos.x += PLAYER_SPEED * dt;
-      if (input.jump && player.isGrounded()) player.jump(JUMP_FORCE);
+      if (input.jump && player.isGrounded()) {
+        player.jump(JUMP_FORCE);
+        soundsRef.current.playMove();
+      }
       input.left = false;
       input.right = false;
       input.jump = false;
+
+      // Land detection: airborne -> grounded transition fires playDrop
+      const groundedNow = player.isGrounded();
+      if (groundedNow && !wasGrounded) soundsRef.current.playDrop();
+      wasGrounded = groundedNow;
 
       // World scroll: shove all gameplay objects left
       for (const plat of platforms) {
@@ -509,6 +525,7 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
 
       if (player.pos.y > GAME_HEIGHT + 100) {
         alive = false;
+        soundsRef.current.playGameOver();
         onGameOverRef.current();
       }
     });
