@@ -734,10 +734,14 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
     for (let i = 0; i < 8; i++) spawnPlatform();
 
     player.onCollide("coin", (coinObj) => {
+      // Apply CURRENT multiplier (starts at 1), then bump for the next
+      // pickup. Otherwise the first coin of a fresh chain already cashes
+      // in at ×2, which is wrong: there's no "chain" until at least two
+      // pickups have happened.
+      coins += mult;
       bumpMult();
       // Multiplier applies to coin reward, not to distance score (distance
       // is passive and rewarding it would let you idle for a multiplier).
-      coins += mult;
       score = coins * COIN_VALUE + Math.floor(distance * DISTANCE_SCORE_RATE);
       onScoreRef.current(score);
       spawnSparkles(coinObj.pos.x, coinObj.pos.y);
