@@ -22,20 +22,34 @@ interface CoinObj extends PosObj {
 
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 600;
-const PLAYER_SPEED = 300;
-const JUMP_FORCE = 650;
-const PLATFORM_SPEED_BASE = 120;
-const PLATFORM_SPEED_MAX = 300;
-const PLATFORM_SPEED_RAMP = 0.5;
+const PLAYER_SPEED = 320;
+const JUMP_FORCE = 900;
+const GRAVITY = 1200;
+// At g=1200, JUMP_FORCE=900 gives a peak jump height of 900²/(2·1200) ≈ 338 px.
+// Platform Y range is 250–500 (top edge), so a 250 px elevation change is the
+// worst case — comfortably reachable from a standing start, with margin for
+// horizontal drift mid-jump.
+
+const PLATFORM_SPEED_BASE = 140;
+const PLATFORM_SPEED_MAX = 380;
+// 1.6 px/s² ramp means cap hits at ~150 s (was ~360 s with 0.5). Difficulty
+// is noticeable in the first minute, not the fifth.
+const PLATFORM_SPEED_RAMP = 1.6;
 const PLATFORM_GAP_BASE = 180;
-const PLATFORM_GAP_MAX = 280;
-const GAP_RAMP = 0.15;
+const PLATFORM_GAP_MAX = 320;
+const GAP_RAMP = 0.35;
+// Platforms shrink over time too — narrowest at PLATFORM_W_MIN_LATE.
+const PLATFORM_W_MIN_EARLY = 110;
+const PLATFORM_W_MAX_EARLY = 200;
+const PLATFORM_W_MIN_LATE = 60;
+const PLATFORM_W_MAX_LATE = 110;
+const WIDTH_RAMP_SECONDS = 120;
 const COIN_VALUE = 10;
 const DISTANCE_SCORE_RATE = 2;
 
 const TILE = 18;
-const PLAYER_SCALE = 2;
-const COIN_SCALE = 1.4;
+const PLAYER_SCALE = 3.2;
+const COIN_SCALE = 1.8;
 
 const MOUNTAIN_W = 1001;
 const MOUNTAIN_H = 168;
@@ -104,18 +118,12 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       global: false,
     });
 
-    // 12 cols × 4 rows of 18px tiles in characters.png; green frog is tiles 0–1
+    // 12 cols × 3 rows of 18px tiles in characters.png. Each tile is a
+    // standalone character (not a walk-cycle pair), so we extract a single
+    // 18×18 frame and animate via squash-and-stretch in the update loop.
+    // Tile (1, 0) = the green frog.
     k.loadSpriteAtlas("/sprites/characters.png", {
-      player: {
-        x: 0,
-        y: 0,
-        width: 36,
-        height: 18,
-        sliceX: 2,
-        anims: {
-          walk: { from: 0, to: 1, loop: true, speed: 6 },
-        },
-      },
+      player: { x: 18, y: 0, width: 18, height: 18 },
     });
     k.loadSprite("platform", "/sprites/platform.png");
     k.loadSprite("coin", "/sprites/coin.png");
@@ -126,7 +134,7 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
     k.loadSprite("bg-cloud2", "/sprites/bg-cloud2.png");
     k.loadSprite("bg-sun", "/sprites/bg-sun.png");
 
-    k.setGravity(1600);
+    k.setGravity(GRAVITY);
 
     let score = 0;
     let coins = 0;
@@ -308,10 +316,13 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       }
     });
 
-    // Player: animated sprite, hops forever (walk anim cycles frames 0-1)
+    // Player: single-frame sprite with hand-rolled squash-and-stretch.
+    // Real walk frames live on different rows of the Kenney sheet but the
+    // squash-on-ground / stretch-on-jump pattern reads more clearly than a
+    // 2-frame cycle at this scale.
     const player = k.add([
-      k.sprite("player", { anim: "walk" }),
-      k.scale(PLAYER_SCALE),
+      k.sprite("player"),
+      k.scale(k.vec2(PLAYER_SCALE, PLAYER_SCALE)),
       k.pos(150, 300),
       k.area(),
       k.body(),
@@ -359,9 +370,17 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       return Math.min(PLATFORM_GAP_MAX, PLATFORM_GAP_BASE + elapsed * GAP_RAMP);
     }
 
+    function getPlatformWidthRange(): { min: number; max: number } {
+      const t = Math.min(1, elapsed / WIDTH_RAMP_SECONDS);
+      const min = PLATFORM_W_MIN_EARLY + (PLATFORM_W_MIN_LATE - PLATFORM_W_MIN_EARLY) * t;
+      const max = PLATFORM_W_MAX_EARLY + (PLATFORM_W_MAX_LATE - PLATFORM_W_MAX_EARLY) * t;
+      return { min, max };
+    }
+
     function spawnPlatform() {
       const gap = getGap();
-      const w = 80 + Math.random() * 100;
+      const { min: wMin, max: wMax } = getPlatformWidthRange();
+      const w = wMin + Math.random() * (wMax - wMin);
       nextPlatformX += gap + Math.random() * 60;
       const y = 250 + Math.random() * 250;
 
@@ -479,6 +498,19 @@ export function Game({ onScore, onGameOver, paused }: GameProps) {
       const groundedNow = player.isGrounded();
       if (groundedNow && !wasGrounded) soundsRef.current.playDrop();
       wasGrounded = groundedNow;
+
+      // Squash-and-stretch. Grounded: subtle running bob (4 Hz). Airborne:
+      // vertical-velocity-driven stretch (taller going up, squat coming down).
+      const vy = (player as unknown as { vel: { y: number } }).vel.y;
+      if (groundedNow) {
+        const bob = 1 + Math.sin(elapsed * 12) * 0.06;
+        (player as unknown as { scale: { x: number; y: number } }).scale.x = PLAYER_SCALE;
+        (player as unknown as { scale: { x: number; y: number } }).scale.y = PLAYER_SCALE * bob;
+      } else {
+        const stretch = Math.max(-0.18, Math.min(0.22, -vy / 1600));
+        (player as unknown as { scale: { x: number; y: number } }).scale.x = PLAYER_SCALE * (1 - stretch * 0.5);
+        (player as unknown as { scale: { x: number; y: number } }).scale.y = PLAYER_SCALE * (1 + stretch);
+      }
 
       // World scroll: shove all gameplay objects left
       for (const plat of platforms) {
