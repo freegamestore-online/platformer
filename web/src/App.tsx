@@ -15,6 +15,7 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>("playing");
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(getBestScore);
+  const [combo, setCombo] = useState(1);
   const [paused, setPaused] = useState(false);
   const scoreRef = useRef(0);
   const { submitScore } = useLeaderboard("platformer");
@@ -22,6 +23,10 @@ export default function App() {
   const handleScore = useCallback((s: number) => {
     scoreRef.current = s;
     setScore(s);
+  }, []);
+
+  const handleCombo = useCallback((mult: number) => {
+    setCombo(mult);
   }, []);
 
   const handleGameOver = useCallback(() => {
@@ -37,6 +42,7 @@ export default function App() {
 
   const start = useCallback(() => {
     setScore(0);
+    setCombo(1);
     scoreRef.current = 0;
     setPhase("playing");
   }, []);
@@ -59,18 +65,44 @@ export default function App() {
           stats={[
             { label: "Score", value: score, accent: true },
             { label: "Best", value: bestScore },
+            ...(combo > 1 ? [{ label: "Combo", value: `×${combo}` }] : []),
           ]}
           onPlayPause={phase === "playing" ? () => setPaused(p => !p) : undefined}
           paused={paused}
           onRestart={start}
           actions={<GameAuth />}
-          rules={<div><h3 style={{fontWeight:700}}>Platformer</h3><h4 style={{fontWeight:600}}>Controls</h4><ul><li>Arrow keys to move</li><li>Tap left side to move, right side to jump</li></ul><h4 style={{fontWeight:600}}>Rules</h4><ul><li>Endless platformer</li><li>Jump between platforms, collect coins</li><li>Don't fall off the bottom</li></ul></div>}
+          rules={
+            <div>
+              <h3 style={{fontWeight:700}}>Platformer</h3>
+              <h4 style={{fontWeight:600}}>Controls</h4>
+              <ul>
+                <li>Arrow keys / WASD to move + jump</li>
+                <li>Tap top of screen to jump; tap left/right side to move</li>
+              </ul>
+              <h4 style={{fontWeight:600}}>Score</h4>
+              <ul>
+                <li>Coins extend your combo timer. Chain pickups to stack a ×2 → ×3 → ×4 multiplier on coin value.</li>
+                <li>Distance also scores, slowly.</li>
+              </ul>
+              <h4 style={{fontWeight:600}}>Hazards</h4>
+              <ul>
+                <li>Red saw-tooth strips on some platforms kill on contact.</li>
+                <li>Falling off the bottom is also lethal.</li>
+              </ul>
+              <h4 style={{fontWeight:600}}>Power-ups</h4>
+              <ul>
+                <li><b>Blue</b> — double-jump: one extra mid-air jump for 8s.</li>
+                <li><b>Purple</b> — slow-mo: world slows to 45% for 3s. Controls stay responsive.</li>
+                <li><b>Gold</b> — shield: absorbs one spike or fall.</li>
+              </ul>
+            </div>
+          }
         />
       }
     >
       <div className="relative w-full h-full">
         {phase === "playing" ? (
-          <Game onScore={handleScore} onGameOver={handleGameOver} paused={paused} />
+          <Game onScore={handleScore} onCombo={handleCombo} onGameOver={handleGameOver} paused={paused} />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <p
