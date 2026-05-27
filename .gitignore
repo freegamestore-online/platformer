@@ -3,3 +3,6 @@ dist
 .tsbuildinfo
 *.tsbuildinfo
 .gstack/
+
+.env
+.env.*
