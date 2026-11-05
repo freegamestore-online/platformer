@@ -127,6 +127,20 @@ interface Sparkle {
   size: number;
 }
 
+// Where a shield drops a player who fell off at playerX: onto the first
+// existing, spike-free platform that still has room to the player's right and
+// starts on screen (inside the right clamp). null if there is none.
+export function shieldLanding(
+  platforms: Pick<PlatformObj, "exists" | "pos" | "width" | "spikes">[],
+  playerX: number,
+): { x: number; y: number } | null {
+  const landing = platforms.find(
+    (p) => p.exists() && !p.spikes && p.pos.x + p.width > playerX + TILE && p.pos.x < GAME_WIDTH - 40 - TILE,
+  );
+  if (!landing) return null;
+  return { x: Math.max(playerX, landing.pos.x + TILE), y: landing.pos.y };
+}
+
 export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onScoreRef = useRef(onScore);
@@ -971,12 +985,10 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
 
       if (player.pos.y > GAME_HEIGHT + 100) {
         // Shield absorbs the fall: put the player on the next safe on-screen platform.
-        const landing = platforms.find(
-          (p) => p.exists() && !p.spikes && p.pos.x + p.width > player.pos.x + TILE && p.pos.x < GAME_WIDTH - 40 - TILE,
-        );
+        const landing = shieldLanding(platforms, player.pos.x);
         if (landing && consumeShield()) {
-          player.pos.x = Math.max(player.pos.x, landing.pos.x + TILE);
-          player.pos.y = landing.pos.y;
+          player.pos.x = landing.x;
+          player.pos.y = landing.y;
           (player as unknown as { vel: { y: number } }).vel.y = 0;
           soundsRef.current.playError();
           mult = 1;
