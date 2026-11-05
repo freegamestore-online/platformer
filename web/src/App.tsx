@@ -7,8 +7,8 @@ import type { GamePhase } from "./types";
 const BEST_SCORE_KEY = "freeplatformer-best";
 
 function getBestScore(): number {
-  const v = localStorage.getItem(BEST_SCORE_KEY);
-  return v ? parseInt(v, 10) : 0;
+  // A corrupt value would show NaN and block every future best from saving.
+  return parseInt(localStorage.getItem(BEST_SCORE_KEY) ?? "", 10) || 0;
 }
 
 export default function App() {
