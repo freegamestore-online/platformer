@@ -93,6 +93,11 @@ const DOUBLE_JUMP_CHARGES = 1;
 const SLOWMO_DURATION = 3;
 const SLOWMO_FACTOR = 0.45;
 const SHIELD_DURATION = 999;  // Until consumed.
+const POWERUP_COLORS: Record<PowerupType, [number, number, number]> = {
+  "double-jump": [100, 180, 255],
+  "slow-mo": [180, 120, 255],
+  shield: [255, 215, 100],
+};
 
 const TILE = 18;
 const PLAYER_SCALE = 3.2;
@@ -226,6 +231,11 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
         lastReportedMult = mult;
         onComboRef.current?.(mult);
       }
+    }
+    function resetCombo() {
+      mult = 1;
+      comboTimer = 0;
+      reportMultIfChanged();
     }
 
     // Power-ups.
@@ -482,10 +492,7 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
           radius: 14,
         });
         // Glyph (reuse drawPowerup at local space)
-        const haloColor: [number, number, number] =
-          pu.type === "double-jump" ? [100, 180, 255] :
-          pu.type === "slow-mo"     ? [180, 120, 255] :
-                                      [255, 215, 100];
+        const haloColor = POWERUP_COLORS[pu.type];
         k.drawCircle({
           pos: k.vec2(iconX + 6, iconY + 10),
           radius: 8,
@@ -552,6 +559,9 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
       k.anchor("bot"),
       "player",
     ]);
+
+    // vel and scale are writable on the kaplay object but not in its inferred type.
+    const playerBody = player as unknown as { vel: { y: number }; scale: { x: number; y: number } };
 
     const trailPositions: { x: number; y: number; age: number }[] = [];
 
@@ -686,10 +696,7 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
     // has a distinct color + glyph, plus a soft halo so it reads as special.
     function drawPowerup(t: PowerupType) {
       // Soft halo
-      const haloColor: [number, number, number] =
-        t === "double-jump" ? [100, 180, 255] :
-        t === "slow-mo"     ? [180, 120, 255] :
-                              [255, 215, 100];
+      const haloColor = POWERUP_COLORS[t];
       k.drawCircle({
         pos: k.vec2(0, 0),
         radius: 14,
@@ -788,12 +795,9 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
       if (!alive) return;
       if (consumeShield()) {
         // Soft pushback — small bounce, reset combo, audio cue.
-        const playerWithVel = player as unknown as { jump: (n: number) => void };
-        playerWithVel.jump(JUMP_FORCE * 0.7);
+        player.jump(JUMP_FORCE * 0.7);
         soundsRef.current.playError();
-        mult = 1;
-        comboTimer = 0;
-        reportMultIfChanged();
+        resetCombo();
         return;
       }
       alive = false;
@@ -845,11 +849,7 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
       // unconditionally optimal; we want it to be a tactical choice.)
       if (comboTimer > 0) {
         comboTimer -= rawDt;
-        if (comboTimer <= 0) {
-          comboTimer = 0;
-          mult = 1;
-          reportMultIfChanged();
-        }
+        if (comboTimer <= 0) resetCombo();
       }
 
       // Power-up timers (use rawDt — slow-mo shouldn't extend itself).
@@ -925,15 +925,15 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
 
       // Squash-and-stretch. Grounded: subtle running bob (4 Hz). Airborne:
       // vertical-velocity-driven stretch (taller going up, squat coming down).
-      const vy = (player as unknown as { vel: { y: number } }).vel.y;
+      const vy = playerBody.vel.y;
       if (groundedNow) {
         const bob = 1 + Math.sin(elapsed * 12) * 0.06;
-        (player as unknown as { scale: { x: number; y: number } }).scale.x = PLAYER_SCALE;
-        (player as unknown as { scale: { x: number; y: number } }).scale.y = PLAYER_SCALE * bob;
+        playerBody.scale.x = PLAYER_SCALE;
+        playerBody.scale.y = PLAYER_SCALE * bob;
       } else {
         const stretch = Math.max(-0.18, Math.min(0.22, -vy / 1600));
-        (player as unknown as { scale: { x: number; y: number } }).scale.x = PLAYER_SCALE * (1 - stretch * 0.5);
-        (player as unknown as { scale: { x: number; y: number } }).scale.y = PLAYER_SCALE * (1 + stretch);
+        playerBody.scale.x = PLAYER_SCALE * (1 - stretch * 0.5);
+        playerBody.scale.y = PLAYER_SCALE * (1 + stretch);
       }
 
       // World scroll: shove all gameplay objects left
@@ -989,11 +989,9 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
         if (landing && consumeShield()) {
           player.pos.x = landing.x;
           player.pos.y = landing.y;
-          (player as unknown as { vel: { y: number } }).vel.y = 0;
+          playerBody.vel.y = 0;
           soundsRef.current.playError();
-          mult = 1;
-          comboTimer = 0;
-          reportMultIfChanged();
+          resetCombo();
           return;
         }
         alive = false;
