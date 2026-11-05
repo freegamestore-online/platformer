@@ -17,6 +17,7 @@ export default function App() {
   const [bestScore, setBestScore] = useState(getBestScore);
   const [combo, setCombo] = useState(1);
   const [paused, setPaused] = useState(false);
+  const [gameKey, setGameKey] = useState(0);
   const scoreRef = useRef(0);
   const { submitScore } = useLeaderboard("platformer");
 
@@ -44,6 +45,8 @@ export default function App() {
     setScore(0);
     setCombo(1);
     scoreRef.current = 0;
+    setPaused(false);
+    setGameKey((k) => k + 1);
     setPhase("playing");
   }, []);
 
@@ -102,7 +105,7 @@ export default function App() {
     >
       <div className="relative w-full h-full">
         {phase === "playing" ? (
-          <Game onScore={handleScore} onCombo={handleCombo} onGameOver={handleGameOver} paused={paused} />
+          <Game key={gameKey} onScore={handleScore} onCombo={handleCombo} onGameOver={handleGameOver} paused={paused} />
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <p

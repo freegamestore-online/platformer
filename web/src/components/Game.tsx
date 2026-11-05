@@ -34,6 +34,7 @@ interface CoinObj extends PosObj {
 }
 
 interface PlatformObj extends PosObj {
+  width: number;
   spikes?: SpikeObj;
   onDraw(fn: () => void): void;
 }
@@ -136,6 +137,11 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
   onGameOverRef.current = onGameOver;
   onComboRef.current = onCombo;
   pausedRef.current = paused;
+  // kaplay scene root; pausing it freezes physics, not just our onUpdate.
+  const rootRef = useRef<{ paused: boolean } | null>(null);
+  useEffect(() => {
+    if (rootRef.current) rootRef.current.paused = !!paused;
+  }, [paused]);
 
   // SDK-synthesized sounds; auto-mute via the topbar toggle.
   const sounds = useGameSounds();
@@ -183,6 +189,8 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
     k.loadSprite("bg-sun", "/sprites/bg-sun.png");
 
     k.setGravity(GRAVITY);
+    rootRef.current = k.getTreeRoot();
+    rootRef.current.paused = !!pausedRef.current;
 
     let score = 0;
     let coins = 0;
@@ -787,18 +795,20 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
     k.onKeyPress("space", () => { input.jump = true; });
     k.onKeyPress("up", () => { input.jump = true; });
     k.onKeyPress("w", () => { input.jump = true; });
+    // Touch left/right is held until the finger lifts; `input` is cleared every frame.
+    const touchHold = { left: false, right: false };
     k.onTouchStart((pos) => {
       if (pos.y < GAME_HEIGHT * 0.4) {
         input.jump = true;
       } else if (pos.x < GAME_WIDTH * 0.5) {
-        input.left = true;
+        touchHold.left = true;
       } else {
-        input.right = true;
+        touchHold.right = true;
       }
     });
     k.onTouchEnd(() => {
-      input.left = false;
-      input.right = false;
+      touchHold.left = false;
+      touchHold.right = false;
     });
 
     k.onUpdate(() => {
@@ -871,8 +881,8 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
 
       // Movement: use rawDt so controls stay responsive in slow-mo (your
       // input rate doesn't slow down even though the world does).
-      if (input.left) player.pos.x -= PLAYER_SPEED * rawDt;
-      if (input.right) player.pos.x += PLAYER_SPEED * rawDt;
+      if (input.left || touchHold.left) player.pos.x -= PLAYER_SPEED * rawDt;
+      if (input.right || touchHold.right) player.pos.x += PLAYER_SPEED * rawDt;
       if (input.jump) {
         if (player.isGrounded()) {
           player.jump(JUMP_FORCE);
@@ -960,6 +970,20 @@ export function Game({ onScore, onGameOver, onCombo, paused }: GameProps) {
       }
 
       if (player.pos.y > GAME_HEIGHT + 100) {
+        // Shield absorbs the fall: put the player on the next safe on-screen platform.
+        const landing = platforms.find(
+          (p) => p.exists() && !p.spikes && p.pos.x + p.width > player.pos.x + TILE && p.pos.x < GAME_WIDTH - 40 - TILE,
+        );
+        if (landing && consumeShield()) {
+          player.pos.x = Math.max(player.pos.x, landing.pos.x + TILE);
+          player.pos.y = landing.pos.y;
+          (player as unknown as { vel: { y: number } }).vel.y = 0;
+          soundsRef.current.playError();
+          mult = 1;
+          comboTimer = 0;
+          reportMultIfChanged();
+          return;
+        }
         alive = false;
         soundsRef.current.playGameOver();
         onGameOverRef.current();
